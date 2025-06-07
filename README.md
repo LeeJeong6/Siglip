@@ -29,5 +29,11 @@
 
 ### CLIP과 비교해본 결과
 
-- 업로드 할 예정
+- ImageNetV2로 CLIP의 zeroshot performance : 
+- 내꺼: 
+
+
+### ImageNEt이 아니라 Flicker8k로 학습 후 Inference
+
+-업로드 할 예정
   
