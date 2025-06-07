@@ -15,7 +15,7 @@
 - 이 데이터셋도 huggingface에서 다운받아 로컬환경으로 불러와서 사용했습니다.
 - 데이터를 로컬 환경으로 불러오는 파일이 ImageNet_data_download.py입니다
 
-## 🏋️ Training
+## Training
 
 - Optimizer: Adam
 - Batch Size: 16
