@@ -8,6 +8,7 @@ from PIL import Image
 from torchvision import transforms
 from tqdm import tqdm,trange
 import matplotlib.pyplot as plt
+from torch.nn import functional as F
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 def generate_prompt(label):
@@ -51,7 +52,7 @@ class ImageNet_DataLoader(Dataset):
         label_idx = self.labels[idx]
         label_name = self.idx2label[label_idx]
         prompt = generate_prompt(label_name)
-
+        
         return image,prompt
 
 def mask(B):
@@ -59,9 +60,24 @@ def mask(B):
     mask.fill_diagonal_(0)
     return mask
 
+def normalize(v_x:torch.tensor,t_x:torch.tensor):
+    """L2 Normalization"""
+    v_x = F.normalize(v_x, dim=-1)
+    t_x = F.normalize(t_x, dim=-1)
+    return v_x,t_x
+
+
 def Sigmoid_loss(image_vector:torch.tensor,text_vector:torch.tensor)-> int:
     """SIGLIP의 핵심. Sigmoid Loss구현"""
+    """기존에 내가 짠 코드임. 내적 값을 출력해보면 모든 값이 다 똑같이 나오는 문제점이 있었음.
+    siglip은 -log(sigmoid(x)) 라는 loss function으로 내적값이 pos-pair는 최대한 크게 neg-pair는 최대한 작게 나오게끔 하는 게 목표였는데
+    이 코드처럼 해버리면 내적값이 0으로 가게함. 즉 0,1로 하는 binary classification에서는 기능을 못하게 하는거였음
+    근데 
+
+
+    ? """
     B = image_vector.shape[0]
+    image_vector,text_vector = normalize(image_vector,text_vector)
     dot_product = image_vector @ text_vector.T #(B,768) @ (768,B) -> (B,B)
     sigmoid = torch.sigmoid(dot_product)
     m = mask(B)
@@ -76,6 +92,27 @@ def Sigmoid_loss(image_vector:torch.tensor,text_vector:torch.tensor)-> int:
     loss = criterion(pair,y)
     return loss
 
+    
+def Sigmoid_loss_GPT(image_vector:torch.tensor,text_vector:torch.tensor,scale=1.0)-> int:
+    """Log-sigmoid 기반 contrastive loss (SIGLIP 스타일)"""
+    B = image_vector.shape[0]
+
+    # 정규화
+    image_vector = F.normalize(image_vector, dim=-1)
+    text_vector = F.normalize(text_vector, dim=-1)
+
+    # 내적
+    logits = scale * (image_vector @ text_vector.T)  # (B, B)
+
+    # 정답 라벨: 대각선만 +1, 나머지는 -1
+    labels = torch.full_like(logits, -1.0)
+    labels.fill_diagonal_(1.0)
+
+    # log-sigmoid loss
+    loss_matrix = F.logsigmoid(labels * logits)  # elementwise
+    loss = -loss_matrix.mean()  # 평균 손실
+
+    return loss
     
 
 class Encoder(nn.Module):
@@ -92,12 +129,14 @@ class Encoder(nn.Module):
 
 if __name__ == "__main__":
 
-    epochs=100
-    batch_size=16
-    lr=0.001
+    epochs=40
+    batch_size=32
+    lr=0.01
     save_dir = "./checkpoint"
     loss_history=[]
     model = Encoder().to(device)
+    
+
     dataset = ImageNet_DataLoader("./ImageNet-100-export/train")
     train_loader = DataLoader(dataset,batch_size=batch_size,shuffle=True)
 
@@ -110,8 +149,9 @@ if __name__ == "__main__":
         for image,prompt in tqdm(train_loader):
             image = image.to(device)
             v_x,t_x = model(image,prompt)
-            loss = Sigmoid_loss(v_x,t_x)
 
+            loss = Sigmoid_loss_GPT(v_x,t_x)
+            
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
