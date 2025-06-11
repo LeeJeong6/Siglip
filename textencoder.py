@@ -162,13 +162,7 @@ class TE(nn.Module):
     def __init__(self):
         super().__init__()
         self.textencoder = TextEncoder()
-        
-
-        #2.Encoding
         self.encoder_model = SiglipEncoder(num_layers=12, head_size=64, num_heads=12)
-        
-
-        #3.condense
         self.pooling_head = SiglipPoolingHead(num_heads=12,embed_dim=768)
         
 
